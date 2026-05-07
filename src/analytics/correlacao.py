@@ -74,7 +74,9 @@ def comparativo_frente_vs_partido(silver: dict[str, pd.DataFrame]) -> pd.DataFra
                         .reset_index(name="alinhamento_frente"))
 
     # partido majoritario de cada frente (a partir do atlas)
-    fm = silver["frente_membros"]
+    # frente_membros pode ter sigla_partido propria — usamos a do deputado para
+    # garantir consistencia
+    fm = silver["frente_membros"][["id_frente", "id_deputado"]]
     dep = silver["deputados"][["id_deputado", "sigla_partido"]]
     fm_part = fm.merge(dep, on="id_deputado", how="left")
     partido_majoritario = (fm_part.groupby("id_frente")["sigla_partido"]
