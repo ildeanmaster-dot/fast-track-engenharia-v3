@@ -1,0 +1,61 @@
+name: databricks-sync
+
+# Sincroniza o Databricks Git folder a cada push em main.
+# Requer 3 secrets configurados em Settings -> Secrets and variables -> Actions:
+#   DATABRICKS_HOST     — URL do workspace
+#   DATABRICKS_TOKEN    — PAT pessoal (lifetime 90d recomendado)
+#   DATABRICKS_REPO_ID  — id do repo (GET /api/2.0/repos?path_prefix=...)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: branch a sincronizar
+        required: false
+        default: main
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checa secrets
+        id: check
+        env:
+          HOST: ${{ secrets.DATABRICKS_HOST }}
+          TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+          REPO_ID: ${{ secrets.DATABRICKS_REPO_ID }}
+        run: |
+          if [ -z "$HOST" ] || [ -z "$TOKEN" ] || [ -z "$REPO_ID" ]; then
+            echo "Secrets nao configurados — skip."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Sync Databricks Repo
+        if: steps.check.outputs.skip != 'true'
+        env:
+          HOST: ${{ secrets.DATABRICKS_HOST }}
+          TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+          REPO_ID: ${{ secrets.DATABRICKS_REPO_ID }}
+          BRANCH: ${{ github.event.inputs.branch || 'main' }}
+        run: |
+          set -euo pipefail
+          echo "Sincronizando repo $REPO_ID -> $BRANCH"
+          response=$(curl -sS -X PATCH \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{\"branch\": \"$BRANCH\"}" \
+            "$HOST/api/2.0/repos/$REPO_ID")
+          echo "$response" | jq .
+          head=$(echo "$response" | jq -r '.head_commit_id // empty')
+          if [ -z "$head" ]; then
+            echo "FALHA: resposta sem head_commit_id"
+            exit 1
+          fi
+          echo "OK head_commit_id=$head"
