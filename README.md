@@ -152,6 +152,28 @@ Auto-sync GitHub → Databricks Repo configurado em
 | [decisions/0003-pyspark-nativo.md](docs/decisions/0003-pyspark-nativo.md) | PySpark como backend |
 | [decisions/0004-auditoria-por-registro.md](docs/decisions/0004-auditoria-por-registro.md) | Auditoria embutida |
 
+## Por que a ingestão fica fora do cluster
+
+Em arquiteturas reais, a coleta da API não roda dentro do cluster Databricks.
+Razões e padrão usado aqui:
+
+- **Custo**: cluster ligado é caro; bater em API leva segundos.
+- **Segurança**: clusters serverless têm egress restrito (least-privilege em
+  multi-tenant).
+- **Acoplamento**: se a API cair, cluster fica retentando e pagando.
+- **Observabilidade**: ingestão num orquestrador externo (Airflow, Lambda)
+  tem dashboards e alertas próprios.
+
+```
+[ Worker leve ]      [ Object Storage ]      [ Cluster pesado ]
+src/ingestion/  ──►  Volume UC samples  ──►  Notebooks 02-06
+(bate na API)        (entrega zone)           (Bronze->Gold->Analytics)
+```
+
+Pra reproduzir a demonstração ao vivo, use `scripts/live_demo.py`: ele apaga
+samples, bate na API (terminal mostra cada coleta), sobe pro Volume e dispara
+o pipeline completo no Databricks.
+
 ## Sobre
 
 Desenvolvido com auxílio de IA (Claude). Decisões e revisões são minhas.
