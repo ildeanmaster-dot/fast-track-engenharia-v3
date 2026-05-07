@@ -36,8 +36,8 @@ ROOT = Path(__file__).resolve().parent.parent
 
 SCHEMA = "ftkeng_v3"
 WORKSPACE_REPO = "/Workspace/Users/developer@yottaflow.com.br/FAST-TRACK-ENGENHARIA-V3"
+# 00_setup nao entra no Job: o live_demo cria schema/volume e sobe samples direto.
 NOTEBOOKS = [
-    f"{WORKSPACE_REPO}/notebooks/00_setup",
     f"{WORKSPACE_REPO}/notebooks/01_bronze",
     f"{WORKSPACE_REPO}/notebooks/02_silver",
     f"{WORKSPACE_REPO}/notebooks/03_gold",
@@ -45,6 +45,28 @@ NOTEBOOKS = [
     f"{WORKSPACE_REPO}/notebooks/05_optionals",
     f"{WORKSPACE_REPO}/notebooks/06_queries",
 ]
+
+
+def _ensure_schema_volume(host: str, token: str) -> None:
+    """Cria schema e volume via SQL antes de subir samples."""
+    H = _h(token)
+    r = requests.get(f"{host}/api/2.0/sql/warehouses", headers=H, timeout=30).json()
+    if not r.get("warehouses"):
+        return
+    wid = r["warehouses"][0]["id"]
+    for sql in (f"CREATE SCHEMA IF NOT EXISTS workspace.{SCHEMA}",
+                f"CREATE VOLUME IF NOT EXISTS workspace.{SCHEMA}.lakehouse"):
+        body = {"statement": sql, "warehouse_id": wid,
+                "wait_timeout": "30s", "on_wait_timeout": "CONTINUE"}
+        rsp = requests.post(f"{host}/api/2.0/sql/statements", headers=H,
+                            data=json.dumps(body), timeout=60).json()
+        sid = rsp.get("statement_id")
+        state = rsp.get("status", {}).get("state")
+        while state in ("PENDING", "RUNNING"):
+            time.sleep(1)
+            rsp = requests.get(f"{host}/api/2.0/sql/statements/{sid}",
+                               headers=H, timeout=30).json()
+            state = rsp.get("status", {}).get("state")
 
 logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(message)s")
 
@@ -87,24 +109,32 @@ def step2_coleta_api() -> None:
 
 
 def step3_upload_volume(host: str, token: str) -> None:
-    print(f"\n[3/5] Subindo JSONL para o repo no Workspace Databricks...")
-    base = f"/Workspace/Users/developer@yottaflow.com.br/FAST-TRACK-ENGENHARIA-V3/data/samples"
+    """Sobe samples direto pro Volume UC (Files API suporta arquivos grandes)."""
+    print(f"\n[3/5] Subindo JSONL para o Volume UC ftkeng_v3...")
+    volume_base = f"/Volumes/workspace/{SCHEMA}/lakehouse/samples"
     samples = sorted((ROOT / "data" / "samples").glob("*.jsonl"))
-    H = _h(token)
+
+    # garante diretorio existe
+    requests.put(
+        f"{host}/api/2.0/fs/directories{volume_base}",
+        headers={"Authorization": f"Bearer {token}"},
+        timeout=30,
+    )
 
     for f in samples:
         content = f.read_bytes()
         if not content:
             continue
-        r = requests.post(
-            f"{host}/api/2.0/workspace/import",
-            headers=H,
-            json={"path": f"{base}/{f.name}",
-                  "content": base64.b64encode(content).decode(),
-                  "format": "AUTO", "overwrite": True},
-            timeout=120,
+        target = f"{volume_base}/{f.name}"
+        # Files API: PUT direto, sem base64. Aceita ate ~5GB.
+        r = requests.put(
+            f"{host}/api/2.0/fs/files{target}",
+            headers={"Authorization": f"Bearer {token}"},
+            params={"overwrite": "true"},
+            data=content,
+            timeout=300,
         )
-        status = "ok" if r.status_code == 200 else f"FAIL {r.status_code}"
+        status = "ok" if r.status_code in (200, 204) else f"FAIL {r.status_code}"
         print(f"  {status:<10s} {f.name:<32s} {len(content):>9d} B")
 
 
@@ -201,6 +231,7 @@ def main() -> None:
 
     step1_limpa_samples()
     step2_coleta_api()
+    _ensure_schema_volume(host, token)
     step3_upload_volume(host, token)
     if step4_run_pipeline(host, token):
         step5_validar_gold(host, token)
