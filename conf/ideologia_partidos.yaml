@@ -1,0 +1,45 @@
+# Mapa ideologico simplificado dos partidos brasileiros (legislatura 57).
+#
+# Eixo: 1 (esquerda) -> 5 (direita). Valor escalar usado para calcular
+# distancia entre frentes em "frentes ideologicamente opostas".
+#
+# Fontes consultadas (varia por analista, classificacao e contestada):
+#   - Analise de votacoes nominais 2019-2024
+#   - Auto-declaracoes nos sites dos partidos
+#   - Trabalhos academicos: Tarouco & Madeira (2013), Power & Zucco (2009)
+#
+# Uso: meramente analitico. Partidos nao classificados ficam com null e sao
+# ignorados nos calculos de "oposicao ideologica".
+
+partidos:
+  # esquerda
+  PT: 1
+  PSOL: 1
+  PCdoB: 1
+  PV: 2
+  REDE: 2
+  PSB: 2
+  PDT: 2
+
+  # centro
+  CIDADANIA: 3
+  SOLIDARIEDADE: 3
+  MDB: 3
+  PSD: 3
+  PSDB: 3
+  PODE: 3
+  AVANTE: 3
+
+  # centro-direita
+  UNIAO: 4
+  REPUBLICANOS: 4
+  PP: 4
+  PRD: 4
+
+  # direita
+  PL: 5
+  NOVO: 5
+  PRTB: 5
+
+# Distancia minima no eixo para considerar par "ideologicamente oposto"
+distancia_minima_oposicao: 3

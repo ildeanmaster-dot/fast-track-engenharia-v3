@@ -1,0 +1,188 @@
+# =============================================================================
+# Catalogo de endpoints da API da Camara dos Deputados
+#
+# Estrategias incrementais:
+#   snapshot          - substitui tudo (listas pequenas/estaveis)
+#   append            - so adiciona novos (eventos imutaveis)
+#   append_watermark  - adiciona usando coluna temporal como watermark
+#   merge_by_hash     - atualiza linha se hash do payload mudou
+#   scd2_by_hash      - versiona historicamente (valid_from/to)
+#
+# Nota sobre fanouts: endpoints filhos como /frentes/{id}/membros nao aceitam
+# parametros pagina/itens — o cliente precisa nao injetar.
+# =============================================================================
+
+api:
+  base_url: https://dadosabertos.camara.leg.br/api/v2
+  user_agent: camara-lakehouse/0.1
+  timeout: 30
+  max_retries: 5
+  rate_limit_rpm: 180
+
+endpoints:
+  # ----- listas base (snapshot) -----
+
+  partidos:
+    path: /partidos
+    params: {itens: 100}
+    paginated: true
+    pk: [id]
+    incremental: snapshot
+    description: Lista de partidos politicos
+
+  legislaturas:
+    path: /legislaturas
+    params: {itens: 100}
+    paginated: true
+    pk: [id]
+    incremental: snapshot
+    description: Legislaturas (uma a cada 4 anos)
+
+  deputados:
+    path: /deputados
+    params: {itens: 100, ordem: ASC, ordenarPor: nome}
+    paginated: true
+    pk: [id]
+    incremental: snapshot
+    description: Deputados em exercicio
+
+  frentes:
+    path: /frentes
+    params: {idLegislatura: 57, itens: 100}
+    paginated: true
+    pk: [id]
+    incremental: snapshot
+    description: Frentes parlamentares da legislatura atual
+
+  orgaos:
+    path: /orgaos
+    params: {itens: 100}
+    paginated: true
+    pk: [id]
+    incremental: snapshot
+    description: Orgaos (comissoes, mesa, plenario)
+
+  # ----- eventos e votacoes (append) -----
+
+  eventos:
+    path: /eventos
+    params: {itens: 100}
+    paginated: true
+    pk: [id]
+    incremental: append
+    description: Sessoes, audiencias, seminarios
+
+  votacoes:
+    path: /votacoes
+    params: {itens: 100, ordem: DESC, ordenarPor: dataHoraRegistro}
+    paginated: true
+    pk: [id]
+    incremental: append
+    description: Votacoes registradas
+
+  # ----- proposicoes (snapshot mas com SCD2 nas tramitacoes) -----
+
+  proposicoes:
+    path: /proposicoes
+    params: {itens: 100, ordem: DESC, ordenarPor: id}
+    paginated: true
+    pk: [id]
+    incremental: merge_by_hash
+    description: Projetos de Lei e correlatos
+
+  # ----- fanouts (1:N a partir de pais) -----
+
+  frente_membros:
+    path: /frentes/{id}/membros
+    params: {}
+    paginated: false
+    pk: [id_frente, id_deputado]
+    incremental: snapshot
+    fanout_from: frentes
+    description: Membros de cada frente
+
+  evento_deputados:
+    path: /eventos/{id}/deputados
+    params: {}
+    paginated: false
+    pk: [id_evento, id_deputado]
+    incremental: append
+    fanout_from: eventos
+    description: Presenca em eventos
+
+  votacao_votos:
+    path: /votacoes/{id}/votos
+    params: {}
+    paginated: false
+    pk: [id_votacao, id_deputado]
+    incremental: append
+    fanout_from: votacoes
+    description: Voto individual em cada votacao
+
+  deputado_despesas:
+    path: /deputados/{id}/despesas
+    params: {itens: 100, ano: 2024, ordem: DESC, ordenarPor: ano}
+    paginated: true
+    pk: [id_deputado, codDocumento]
+    incremental: append_watermark
+    watermark: [ano, mes]
+    fanout_from: deputados
+    description: Despesas CEAP por deputado
+
+  deputado_discursos:
+    path: /deputados/{id}/discursos
+    params: {itens: 100, dataInicio: "2024-01-01", dataFim: "2024-12-31"}
+    paginated: true
+    pk: [id_deputado, dataHoraInicio]
+    incremental: append_watermark
+    watermark: [dataHoraInicio]
+    fanout_from: deputados
+    description: Discursos em plenario por deputado
+
+  proposicao_tramitacoes:
+    path: /proposicoes/{id}/tramitacoes
+    params: {}
+    paginated: false
+    pk: [id_proposicao, sequencia]
+    incremental: scd2_by_hash
+    fanout_from: proposicoes
+    description: Historico de tramitacao das PLs
+
+  orgao_membros:
+    path: /orgaos/{id}/membros
+    params: {}
+    paginated: false
+    pk: [id_orgao, id_deputado]
+    incremental: snapshot
+    fanout_from: orgaos
+    description: Membros de cada orgao
+
+  orgao_eventos:
+    path: /orgaos/{id}/eventos
+    params: {}
+    paginated: false
+    pk: [id_evento]
+    incremental: append
+    fanout_from: orgaos
+    description: Eventos de cada orgao
+
+  orgao_votacoes:
+    path: /orgaos/{id}/votacoes
+    params: {}
+    paginated: false
+    pk: [id_votacao]
+    incremental: append
+    fanout_from: orgaos
+    description: Votacoes em cada orgao
+
+# ----- limites de fanout (max_parents) ----------------------------------------
+fanout_limits:
+  frente_membros: 50
+  evento_deputados: 20
+  votacao_votos: 50
+  deputado_despesas: 30
+  deputado_discursos: 20
+  proposicao_tramitacoes: 50
+  orgao_membros: 10
+  orgao_eventos: 10
+  orgao_votacoes: 10
