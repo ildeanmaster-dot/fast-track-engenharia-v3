@@ -116,6 +116,11 @@ def frentes_ideologicamente_opostas(
                 "eixo_b": float(eb),
                 "distancia_ideologica": float(distancia),
             })
+    if not rows:
+        return pd.DataFrame(columns=[
+            "frente_a", "nome_a", "frente_b", "nome_b", "membros_comum",
+            "eixo_a", "eixo_b", "distancia_ideologica",
+        ])
     return (pd.DataFrame(rows)
             .sort_values("distancia_ideologica", ascending=False)
             .reset_index(drop=True))
