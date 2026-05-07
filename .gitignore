@@ -1,0 +1,39 @@
+# python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# build
+build/
+dist/
+
+# data — samples sao versionados (databricks le do repo)
+data/bronze/
+data/silver/
+data/gold/
+data/streaming/
+lakehouse/
+spark-warehouse/
+
+# secrets
+.env
+.env.local
+*.local
+
+# logs
+logs/*.log
+logs/*.jsonl
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+Thumbs.db
+.DS_Store

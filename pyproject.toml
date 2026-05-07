@@ -1,0 +1,27 @@
+[project]
+name = "camara-lakehouse"
+version = "0.1.0"
+description = "Pipeline lakehouse Camara dos Deputados - Upskill Tiller T2"
+authors = [{name = "ildeanmaster", email = "ildeanmaster@gmail.com"}]
+requires-python = ">=3.11,<3.13"
+license = {text = "MIT"}
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = ["notebooks", "data"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]
+ignore = ["E501"]  # ja temos line-length configurado
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["B011"]  # asserts em tests sao OK
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-ra --strict-markers"
+markers = [
+    "integration: tests que requerem rede/Spark (skipped por default)",
+]
